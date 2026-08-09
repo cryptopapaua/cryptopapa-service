@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CRYPTOPAPA · Сервис</title>
+<title>Мастер Сервис</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>⛏️</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -42,6 +42,8 @@ header{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.92);backdro
 .row2{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:13px;color:var(--mut)}
 .ttn{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;background:#f2f4f7;padding:3px 8px;border-radius:8px;display:inline-flex;align-items:center;gap:6px}
 .copybtn{border:0;background:none;cursor:pointer;font-size:13px;padding:0;line-height:1}
+.numrow{display:flex;align-items:center;gap:8px;margin:10px 0 0;font-size:13.5px;color:var(--mut);flex-wrap:wrap}
+.numrow b{color:var(--ink)}
 .npline{display:inline-flex;align-items:center;gap:6px;font-size:12.5px}
 .npbadge{background:#DA291C;color:#fff;font-weight:800;font-size:10px;border-radius:5px;padding:2px 5px;letter-spacing:.3px}
 .np-g{color:var(--green);font-weight:600}.np-o{color:#b36b05;font-weight:600}.np-b{color:var(--blue);font-weight:600}.np-r{color:var(--red);font-weight:600}.np-x{color:var(--mut);font-weight:600}
@@ -234,7 +236,7 @@ async function fetchNp(){
 // ---------- ЭКРАН ВХОДА ----------
 function renderLogin(){
  root.innerHTML='<div class="login"><div class="lcard">'+
- '<div class="coin">₿</div><h1>CRYPTOPAPA Сервис</h1>'+
+ '<div class="coin">⚙️</div><h1>Мастер Сервис</h1>'+
  '<p>Учёт ремонта майнинг-оборудования</p>'+
  '<label class="fl">Логин (email)</label><input class="fi" id="lemail" type="email" autocomplete="username" placeholder="email">'+
  '<label class="fl">Пароль</label><input class="fi" id="lpass" type="password" autocomplete="current-password" placeholder="••••••••">'+
@@ -255,7 +257,7 @@ function renderLogin(){
 function renderShell(){
  var isOwner=S.profile.role==='owner';
  root.innerHTML='<header><div class="hin">'+
- '<div class="logo"><div class="coin">₿</div><div>CRYPTOPAPA <small>сервис-учёт</small></div></div>'+
+ '<div class="logo"><div class="coin">⚙️</div><div>Мастер Сервис <small>учёт ремонта</small></div></div>'+
  '<div class="spacer"></div>'+
  '<div class="who">'+esc(S.profile.display_name)+'<br>'+(isOwner?'владелец':'мастер')+'</div>'+
  '<button class="btn btn-ghost" id="outbtn" title="Выйти">Выйти</button>'+
@@ -310,6 +312,7 @@ function captureInputs(){
  list.querySelectorAll('.best').forEach(function(inp){var e=S.edit['b'+inp.getAttribute('data-board')];if(e)e.est_chips=inp.value;});
  list.querySelectorAll('.bfact').forEach(function(inp){var e=S.edit['b'+inp.getAttribute('data-board')];if(e)e.fact_chips=inp.value;});
  list.querySelectorAll('.bnote').forEach(function(inp){var e=S.edit['b'+inp.getAttribute('data-board')];if(e)e.note=inp.value;});
+ list.querySelectorAll('.rnumin').forEach(function(inp){var e=S.edit['r'+inp.getAttribute('data-req')];if(e)e.number=inp.value;});
 }
 
 function stageSelect(cls,attr,id,cur){
@@ -386,6 +389,11 @@ function renderList(){
   h+='</div>';
   if(open){
    h+='<div class="cbody">';
+   var re=S.edit['r'+r.id];
+   h+='<div class="numrow">';
+   if(!re){h+='№ заявки: <b>'+(r.number?('#'+r.number):'без №')+'</b><button class="ebtn" style="margin-left:0" data-en="'+r.id+'">✏️ Изменить</button>';}
+   else{h+='<input class="chipin rnumin" data-req="'+r.id+'" type="number" placeholder="№" value="'+esc(re.number)+'"><button class="btn sbtn" data-sn="'+r.id+'">💾 Сохранить</button><button class="btn cbtn" data-cn="'+r.id+'">Отмена</button>';}
+   h+='</div>';
    h+='<div class="sect">Оборудование и стадии</div>';
    its.forEach(function(i){
     var bs=itemBoards(i.id);
@@ -430,6 +438,26 @@ function renderList(){
   var b=S.boards.find(function(x){return x.id===id;});if(!b)return;
   S.edit['b'+id]={stage:b.stage,defects:(b.defects||[]).slice(),est_chips:b.est_chips||'',fact_chips:b.fact_chips==null?'':String(b.fact_chips),note:b.note||''};
   renderList();
+ });});
+ // ✏️ Изменить номер заявки (владелец и мастер)
+ list.querySelectorAll('[data-en]').forEach(function(btn){btn.addEventListener('click',function(){
+  var id=+btn.getAttribute('data-en');
+  var r=S.requests.find(function(x){return x.id===id;});if(!r)return;
+  S.edit['r'+id]={number:r.number==null?'':String(r.number)};
+  renderList();
+ });});
+ list.querySelectorAll('[data-sn]').forEach(function(btn){btn.addEventListener('click',async function(){
+  captureInputs();
+  var id=+btn.getAttribute('data-sn');var e=S.edit['r'+id];if(!e)return;
+  btn.disabled=true;btn.textContent='Сохраняем…';
+  var num=(String(e.number||'').trim()==='')?null:+e.number;
+  var r=await sb.from('requests').update({number:num}).eq('id',id);
+  if(r.error){toast('Ошибка сохранения');btn.disabled=false;btn.textContent='💾 Сохранить';return;}
+  var rq=S.requests.find(function(x){return x.id===id;});if(rq)rq.number=num;
+  delete S.edit['r'+id];renderList();toast('Номер сохранён ✓');
+ });});
+ list.querySelectorAll('[data-cn]').forEach(function(btn){btn.addEventListener('click',function(){
+  delete S.edit['r'+btn.getAttribute('data-cn')];renderList();
  });});
  // ✏️ Изменить: позиция без плат
  list.querySelectorAll('[data-ei]').forEach(function(btn){btn.addEventListener('click',function(){
