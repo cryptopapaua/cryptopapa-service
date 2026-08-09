@@ -52,12 +52,20 @@ header{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.92);backdro
 .ititle{font-weight:600;font-size:14.5px;flex:1;min-width:150px}
 .ititle small{color:var(--mut);font-weight:500}
 .stagesel{font-family:inherit;font-weight:700;font-size:13px;border-radius:10px;padding:8px 10px;cursor:pointer;border:1.5px solid transparent}
+.stpill{font-weight:700;font-size:12.5px;border-radius:10px;padding:7px 11px;display:inline-block}
 .st-grey{background:#eef0f4;color:#5a6270}.st-blue{background:#e6efff;color:var(--blue)}.st-orange{background:#fff1de;color:#b36b05}.st-purple{background:#f0e9fc;color:var(--purple)}.st-green{background:#e3f6ec;color:var(--green)}.st-teal{background:#e0f4f3;color:var(--teal)}.st-red{background:#fde9e7;color:var(--red)}
 .board{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:8px}
+.board.editing{border-color:var(--acc);box-shadow:0 0 0 2px rgba(247,147,26,.15)}
 .brow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .blabel{font-weight:700;font-size:13.5px}
-.bdel{margin-left:auto;background:none;border:0;color:#c3aeb0;cursor:pointer;font-size:13px;padding:4px;font-family:inherit}
+.ebtn{margin-left:auto;background:#fff;border:1px solid var(--line);color:var(--mut);border-radius:10px;padding:6px 12px;font-size:12.5px;cursor:pointer;font-family:inherit;font-weight:600}
+.ebtn:hover{border-color:var(--acc);color:var(--acc2)}
+.bdel{background:none;border:0;color:#c3aeb0;cursor:pointer;font-size:13px;padding:4px 6px;font-family:inherit}
 .bdel.arm{color:var(--red);font-weight:700}
+.bview{margin-top:7px;font-size:13px;color:var(--mut);display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center}
+.bview b{color:var(--ink)}
+.defro{font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:99px;background:#fde9e7;color:var(--red)}
+.bnoteview{width:100%;font-size:13px;color:#5a6270;background:#f7f8fa;border-radius:8px;padding:6px 9px;white-space:pre-wrap}
 .defrow{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
 .deflab{font-size:11px;font-weight:700;color:var(--mut);width:100%;text-transform:uppercase;letter-spacing:.6px}
 .defbtn{font-size:12px;padding:5px 11px;border-radius:99px;border:1px solid var(--line);background:#fff;color:var(--mut);cursor:pointer;font-family:inherit}
@@ -68,6 +76,9 @@ header{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.92);backdro
 .chipin:focus{outline:2px solid var(--acc);outline-offset:-1px}
 .bnote{width:100%;margin-top:9px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;font-size:15px;font-family:inherit;background:#fff}
 .bnote:focus{outline:2px solid var(--acc);outline-offset:-1px}
+.editactions{display:flex;gap:8px;margin-top:10px;align-items:center}
+.sbtn{background:var(--green);color:#fff;padding:9px 16px;font-size:13.5px;border-radius:10px;font-weight:700}
+.cbtn{background:#fff;border:1px solid var(--line);color:var(--mut);padding:9px 14px;font-size:13.5px;border-radius:10px}
 .addboard{margin-top:8px;background:#fff;border:1.5px dashed #c9cfd9;color:var(--mut);padding:8px 14px;border-radius:10px;font-size:13px;cursor:pointer;font-family:inherit}
 .sect{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--mut);margin:14px 0 6px}
 .note{background:#fff8ec;border:1px solid #ffe1b0;border-radius:12px;padding:10px 12px;font-size:13.5px;margin-top:10px;white-space:pre-wrap}
@@ -133,7 +144,8 @@ var RANK={received:0,diagnostics:1,waiting_parts:2,repair:3,scrap:4,done:4,shipp
 var DEFECTS=['КЗ','Перегрев','Брак','Не видит чипы','Плавающая','Механика'];
 function sm(k){for(var j=0;j<STAGES.length;j++){if(STAGES[j].k===k)return STAGES[j];}return STAGES[0];}
 
-var S={profile:null,requests:[],items:[],boards:[],comments:[],clients:[],filter:'all',search:'',expanded:{},confirmDel:{},confirmDelB:{}};
+// S.edit: буферы незасохранённых правок: 'b<id>' — плата, 'i<id>' — позиция без плат
+var S={profile:null,requests:[],items:[],boards:[],comments:[],clients:[],filter:'all',search:'',expanded:{},confirmDel:{},confirmDelB:{},edit:{}};
 var root=document.getElementById('root');
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];});}
@@ -146,7 +158,6 @@ function itemBoards(id){return S.boards.filter(function(b){return b.item_id===id
 function reqComments(id){return S.comments.filter(function(c){return c.request_id===id;});}
 function clientOf(r){for(var j=0;j<S.clients.length;j++){if(S.clients[j].id===r.client_id)return S.clients[j];}return null;}
 
-// Итоговая стадия позиции: если есть платы — самая отстающая из них
 function effStage(it){
  var bs=itemBoards(it.id);if(!bs.length)return it.stage;
  var min=null;bs.forEach(function(b){var r=RANK[b.stage]!==undefined?RANK[b.stage]:0;if(min===null||r<min.r)min={r:r,s:b.stage};});
@@ -171,7 +182,8 @@ async function loadData(){
  ]);
  S.requests=res[0].data||[];S.items=res[1].data||[];S.boards=res[2].data||[];S.comments=res[3].data||[];
  if(S.profile&&S.profile.role==='owner'){var rc=await sb.from('clients').select('*').order('name');S.clients=rc.data||[];}
- // не перерисовываем, пока пользователь печатает в поле внутри списка
+ // если открыто редактирование или человек печатает — не перерисовываем, чтобы не потерять правки
+ if(Object.keys(S.edit).length)return;
  var ae=document.activeElement;
  var list=document.getElementById('list');
  if(ae&&list&&list.contains(ae)&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'))return;
@@ -245,6 +257,14 @@ function visibleRequests(){
  });
 }
 
+// перед любой перерисовкой забираем напечатанное в буферы, чтобы ничего не пропало
+function captureInputs(){
+ var list=document.getElementById('list');if(!list)return;
+ list.querySelectorAll('.best').forEach(function(inp){var e=S.edit['b'+inp.getAttribute('data-board')];if(e)e.est_chips=inp.value;});
+ list.querySelectorAll('.bfact').forEach(function(inp){var e=S.edit['b'+inp.getAttribute('data-board')];if(e)e.fact_chips=inp.value;});
+ list.querySelectorAll('.bnote').forEach(function(inp){var e=S.edit['b'+inp.getAttribute('data-board')];if(e)e.note=inp.value;});
+}
+
 function stageSelect(cls,attr,id,cur){
  var m=sm(cur);
  var h='<select class="stagesel '+m.c+' '+cls+'" '+attr+'="'+id+'">';
@@ -253,26 +273,45 @@ function stageSelect(cls,attr,id,cur){
 }
 
 function boardHtml(b,isOwner){
- var h='<div class="board">';
- h+='<div class="brow"><span class="blabel">🟩 '+esc(b.label)+'</span>'+stageSelect('bstage','data-board',b.id,b.stage);
- if(isOwner)h+='<button class="bdel'+(S.confirmDelB[b.id]?' arm':'')+'" data-delboard="'+b.id+'">'+(S.confirmDelB[b.id]?'удалить?':'✕')+'</button>';
- h+='</div>';
- h+='<div class="defrow"><span class="deflab">Дефекты</span>';
- DEFECTS.forEach(function(d){
-  var on=(b.defects||[]).indexOf(d)>=0;
-  h+='<button class="defbtn'+(on?' on':'')+'" data-def="'+esc(d)+'" data-board="'+b.id+'">'+(on?'⚠ ':'')+esc(d)+'</button>';
- });
- h+='</div>';
- h+='<div class="chiprow">'+
-  '<label class="chipfield">ЧИПОВ ПРЕДВАРИТЕЛЬНО<input class="chipin best" data-board="'+b.id+'" placeholder="напр. 5–10" value="'+esc(b.est_chips||'')+'"></label>'+
-  '<label class="chipfield">ЗАМЕНЕНО ФАКТИЧЕСКИ<input class="chipin bfact" data-board="'+b.id+'" type="number" min="0" placeholder="—" value="'+(b.fact_chips==null?'':b.fact_chips)+'"></label>'+
- '</div>';
- h+='<input class="bnote" data-board="'+b.id+'" placeholder="Заметка по плате…" value="'+esc(b.note||'')+'">';
- h+='</div>';
+ var e=S.edit['b'+b.id];
+ var h='';
+ if(!e){
+  // режим просмотра
+  var m=sm(b.stage);
+  h+='<div class="board">';
+  h+='<div class="brow"><span class="blabel">🟩 '+esc(b.label)+'</span><span class="stpill '+m.c+'">'+m.i+' '+m.l+'</span>'+
+   '<button class="ebtn" data-eb="'+b.id+'">✏️ Изменить</button></div>';
+  var facts='';
+  (b.defects||[]).forEach(function(d){facts+='<span class="defro">⚠ '+esc(d)+'</span>';});
+  if(b.est_chips)facts+='<span>Чипов предв.: <b>'+esc(b.est_chips)+'</b></span>';
+  if(b.fact_chips!=null)facts+='<span>Заменено: <b>'+b.fact_chips+' шт</b></span>';
+  if(facts)h+='<div class="bview">'+facts+'</div>';
+  if(b.note)h+='<div class="bview"><span class="bnoteview">📝 '+esc(b.note)+'</span></div>';
+  h+='</div>';
+ }else{
+  // режим редактирования
+  h+='<div class="board editing">';
+  h+='<div class="brow"><span class="blabel">🟩 '+esc(b.label)+'</span>'+stageSelect('bstage','data-board',b.id,e.stage)+'</div>';
+  h+='<div class="defrow"><span class="deflab">Дефекты</span>';
+  DEFECTS.forEach(function(d){
+   var on=(e.defects||[]).indexOf(d)>=0;
+   h+='<button class="defbtn'+(on?' on':'')+'" data-def="'+esc(d)+'" data-board="'+b.id+'">'+(on?'⚠ ':'')+esc(d)+'</button>';
+  });
+  h+='</div>';
+  h+='<div class="chiprow">'+
+   '<label class="chipfield">ЧИПОВ ПРЕДВАРИТЕЛЬНО<input class="chipin best" data-board="'+b.id+'" placeholder="напр. 5–10" value="'+esc(e.est_chips||'')+'"></label>'+
+   '<label class="chipfield">ЗАМЕНЕНО ФАКТИЧЕСКИ<input class="chipin bfact" data-board="'+b.id+'" type="number" min="0" placeholder="—" value="'+esc(e.fact_chips==null?'':e.fact_chips)+'"></label>'+
+  '</div>';
+  h+='<input class="bnote" data-board="'+b.id+'" placeholder="Заметка по плате…" value="'+esc(e.note||'')+'">';
+  h+='<div class="editactions"><button class="btn sbtn" data-sb="'+b.id+'">💾 Сохранить</button><button class="btn cbtn" data-cb="'+b.id+'">Отмена</button><span class="spacer"></span>';
+  if(isOwner)h+='<button class="bdel'+(S.confirmDelB[b.id]?' arm':'')+'" data-delboard="'+b.id+'">'+(S.confirmDelB[b.id]?'удалить плату?':'✕ удалить')+'</button>';
+  h+='</div></div>';
+ }
  return h;
 }
 
 function renderList(){
+ captureInputs();
  renderChips();
  var isOwner=S.profile.role==='owner';
  var rs=visibleRequests();
@@ -302,10 +341,13 @@ function renderList(){
    h+='<div class="sect">Оборудование и стадии</div>';
    its.forEach(function(i){
     var bs=itemBoards(i.id);
+    var ie=S.edit['i'+i.id];
     h+='<div class="item"><div class="itop"><div class="ititle">'+esc(i.title)+(i.qty>1?' <small>×'+i.qty+'</small>':'')+'</div>';
-    if(bs.length){var m=sm(effStage(i));h+='<span class="pill" style="font-size:12px" ><span class="stagesel '+m.c+'" style="padding:6px 10px;display:inline-block">'+m.i+' '+m.l+'</span></span>';}
-    else h+=stageSelect('istage','data-item',i.id,i.stage);
+    if(bs.length){var m=sm(effStage(i));h+='<span class="stpill '+m.c+'">'+m.i+' '+m.l+'</span>';}
+    else if(ie){h+=stageSelect('istage','data-item',i.id,ie.stage);}
+    else{var mi=sm(i.stage);h+='<span class="stpill '+mi.c+'">'+mi.i+' '+mi.l+'</span><button class="ebtn" data-ei="'+i.id+'">✏️ Изменить</button>';}
     h+='</div>';
+    if(!bs.length&&ie)h+='<div class="editactions"><button class="btn sbtn" data-si="'+i.id+'">💾 Сохранить</button><button class="btn cbtn" data-ci="'+i.id+'">Отмена</button></div>';
     bs.forEach(function(b){h+=boardHtml(b,isOwner);});
     if(isOwner&&bs.length)h+='<button class="addboard" data-additem="'+i.id+'">＋ добавить плату</button>';
     h+='</div>';
@@ -333,73 +375,105 @@ function renderList(){
  list.querySelectorAll('.copybtn').forEach(function(b){b.addEventListener('click',function(){
   navigator.clipboard.writeText(b.getAttribute('data-copy')).then(function(){toast('ТТН скопирован ✓');});
  });});
- // стадия позиции без плат
- list.querySelectorAll('.istage').forEach(function(sel){sel.addEventListener('change',async function(){
-  var id=+sel.getAttribute('data-item');var v=sel.value;
-  var r=await sb.from('items').update({stage:v,updated_at:new Date().toISOString()}).eq('id',id);
-  if(r.error){toast('Ошибка сохранения');}else{
-   var it=S.items.find(function(x){return x.id===id;});if(it)it.stage=v;
-   toast(sm(v).i+' '+sm(v).l);renderList();
-  }
- });});
- // стадия платы
- list.querySelectorAll('.bstage').forEach(function(sel){sel.addEventListener('change',async function(){
-  var id=+sel.getAttribute('data-board');var v=sel.value;
-  var r=await sb.from('boards').update({stage:v,updated_at:new Date().toISOString()}).eq('id',id);
-  if(r.error){toast('Ошибка сохранения');}else{
-   var b=S.boards.find(function(x){return x.id===id;});if(b)b.stage=v;
-   toast(sm(v).i+' '+sm(v).l);renderList();
-  }
- });});
- // дефекты платы
- list.querySelectorAll('.defbtn').forEach(function(btn){btn.addEventListener('click',async function(){
-  var id=+btn.getAttribute('data-board');var d=btn.getAttribute('data-def');
+
+ // ✏️ Изменить: плата
+ list.querySelectorAll('[data-eb]').forEach(function(btn){btn.addEventListener('click',function(){
+  var id=+btn.getAttribute('data-eb');
   var b=S.boards.find(function(x){return x.id===id;});if(!b)return;
-  var arr=(b.defects||[]).slice();var ix=arr.indexOf(d);
-  if(ix>=0)arr.splice(ix,1);else arr.push(d);
-  var r=await sb.from('boards').update({defects:arr,updated_at:new Date().toISOString()}).eq('id',id);
-  if(r.error){toast('Ошибка сохранения');}else{b.defects=arr;toast(ix>=0?('Убрано: '+d):('Дефект: '+d));renderList();}
+  S.edit['b'+id]={stage:b.stage,defects:(b.defects||[]).slice(),est_chips:b.est_chips||'',fact_chips:b.fact_chips==null?'':String(b.fact_chips),note:b.note||''};
+  renderList();
  });});
- // чипы и заметка платы — сохраняем при уходе из поля
- function bindBoardField(cls,field,parse){
-  list.querySelectorAll(cls).forEach(function(inp){inp.addEventListener('change',async function(){
-   var id=+inp.getAttribute('data-board');var val=parse(inp.value);
-   var patch={updated_at:new Date().toISOString()};patch[field]=val;
-   var r=await sb.from('boards').update(patch).eq('id',id);
-   if(r.error){toast('Ошибка сохранения');}else{
-    var b=S.boards.find(function(x){return x.id===id;});if(b)b[field]=val;
-    toast('Сохранено ✓');
-   }
-  });});
- }
- bindBoardField('.best','est_chips',function(v){v=v.trim();return v||null;});
- bindBoardField('.bfact','fact_chips',function(v){v=v.trim();return v===''?null:+v;});
- bindBoardField('.bnote','note',function(v){v=v.trim();return v||null;});
+ // ✏️ Изменить: позиция без плат
+ list.querySelectorAll('[data-ei]').forEach(function(btn){btn.addEventListener('click',function(){
+  var id=+btn.getAttribute('data-ei');
+  var it=S.items.find(function(x){return x.id===id;});if(!it)return;
+  S.edit['i'+id]={stage:it.stage};
+  renderList();
+ });});
+ // выбор стадии в режиме редактирования — только в буфер
+ list.querySelectorAll('.bstage').forEach(function(sel){sel.addEventListener('change',function(){
+  var e=S.edit['b'+sel.getAttribute('data-board')];if(e){e.stage=sel.value;renderList();}
+ });});
+ list.querySelectorAll('.istage').forEach(function(sel){sel.addEventListener('change',function(){
+  var e=S.edit['i'+sel.getAttribute('data-item')];if(e){e.stage=sel.value;renderList();}
+ });});
+ // дефекты — только в буфер
+ list.querySelectorAll('.defbtn').forEach(function(btn){btn.addEventListener('click',function(){
+  var e=S.edit['b'+btn.getAttribute('data-board')];if(!e)return;
+  var d=btn.getAttribute('data-def');var ix=e.defects.indexOf(d);
+  if(ix>=0)e.defects.splice(ix,1);else e.defects.push(d);
+  renderList();
+ });});
+ // 💾 Сохранить плату
+ list.querySelectorAll('[data-sb]').forEach(function(btn){btn.addEventListener('click',async function(){
+  captureInputs();
+  var id=+btn.getAttribute('data-sb');var e=S.edit['b'+id];if(!e)return;
+  btn.disabled=true;btn.textContent='Сохраняем…';
+  var patch={
+   stage:e.stage,
+   defects:e.defects,
+   est_chips:(e.est_chips||'').trim()||null,
+   fact_chips:(String(e.fact_chips||'').trim()==='')?null:+e.fact_chips,
+   note:(e.note||'').trim()||null,
+   updated_at:new Date().toISOString()
+  };
+  var r=await sb.from('boards').update(patch).eq('id',id);
+  if(r.error){toast('Ошибка сохранения');btn.disabled=false;btn.textContent='💾 Сохранить';return;}
+  var b=S.boards.find(function(x){return x.id===id;});
+  if(b){b.stage=patch.stage;b.defects=patch.defects;b.est_chips=patch.est_chips;b.fact_chips=patch.fact_chips;b.note=patch.note;}
+  delete S.edit['b'+id];renderList();toast('Сохранено ✓');
+ });});
+ // 💾 Сохранить позицию
+ list.querySelectorAll('[data-si]').forEach(function(btn){btn.addEventListener('click',async function(){
+  var id=+btn.getAttribute('data-si');var e=S.edit['i'+id];if(!e)return;
+  btn.disabled=true;btn.textContent='Сохраняем…';
+  var r=await sb.from('items').update({stage:e.stage,updated_at:new Date().toISOString()}).eq('id',id);
+  if(r.error){toast('Ошибка сохранения');btn.disabled=false;btn.textContent='💾 Сохранить';return;}
+  var it=S.items.find(function(x){return x.id===id;});if(it)it.stage=e.stage;
+  delete S.edit['i'+id];renderList();toast('Сохранено ✓');
+ });});
+ // Отмена
+ list.querySelectorAll('[data-cb]').forEach(function(btn){btn.addEventListener('click',function(){
+  delete S.edit['b'+btn.getAttribute('data-cb')];delete S.confirmDelB[+btn.getAttribute('data-cb')];renderList();
+ });});
+ list.querySelectorAll('[data-ci]').forEach(function(btn){btn.addEventListener('click',function(){
+  delete S.edit['i'+btn.getAttribute('data-ci')];renderList();
+ });});
  // добавить плату (владелец)
  list.querySelectorAll('[data-additem]').forEach(function(btn){btn.addEventListener('click',async function(){
   var itemId=+btn.getAttribute('data-additem');
   var n=itemBoards(itemId).length+1;
   var r=await sb.from('boards').insert({item_id:itemId,label:'Плата '+n});
-  if(r.error){toast('Ошибка');}else{await loadData();toast('Плата добавлена');}
+  if(r.error){toast('Ошибка');}else{
+   var res=await sb.from('boards').select('*').order('id');S.boards=res.data||S.boards;
+   renderList();toast('Плата добавлена');
+  }
  });});
  // удалить плату (владелец, два клика)
  list.querySelectorAll('[data-delboard]').forEach(function(btn){btn.addEventListener('click',async function(){
   var id=+btn.getAttribute('data-delboard');
   if(!S.confirmDelB[id]){S.confirmDelB={};S.confirmDelB[id]=true;renderList();return;}
   var r=await sb.from('boards').delete().eq('id',id);
-  if(r.error){toast('Ошибка удаления');}else{delete S.confirmDelB[id];await loadData();toast('Плата удалена');}
+  if(r.error){toast('Ошибка удаления');}else{
+   delete S.confirmDelB[id];delete S.edit['b'+id];
+   S.boards=S.boards.filter(function(b){return b.id!==id;});
+   renderList();toast('Плата удалена');
+  }
  });});
  list.querySelectorAll('[data-send]').forEach(function(b){b.addEventListener('click',async function(){
   var id=+b.getAttribute('data-send');var ta=document.getElementById('cmt-'+id);var txt=ta.value.trim();
   if(!txt)return;b.disabled=true;
   var r=await sb.from('comments').insert({request_id:id,author_id:S.uid,author_name:S.profile.display_name,author_role:S.profile.role,body:txt});
-  if(r.error){toast('Ошибка отправки');b.disabled=false;}else{await loadData();toast('Комментарий добавлен ✓');}
+  if(r.error){toast('Ошибка отправки');b.disabled=false;}else{
+   var res=await sb.from('comments').select('*').order('created_at');S.comments=res.data||S.comments;
+   renderList();toast('Комментарий добавлен ✓');
+  }
  });});
  list.querySelectorAll('[data-del]').forEach(function(b){b.addEventListener('click',async function(){
   var id=+b.getAttribute('data-del');
   if(!S.confirmDel[id]){S.confirmDel[id]=true;renderList();return;}
   var r=await sb.from('requests').delete().eq('id',id);
-  if(r.error){toast('Ошибка удаления');}else{delete S.confirmDel[id];delete S.expanded[id];await loadData();toast('Заявка удалена');}
+  if(r.error){toast('Ошибка удаления');}else{delete S.confirmDel[id];delete S.expanded[id];await loadData();renderList();toast('Заявка удалена');}
  });});
 }
 
@@ -451,7 +525,6 @@ function openNew(){
   if(rr.error||!rr.data){toast('Ошибка создания');btn.disabled=false;btn.textContent='Создать заявку';return;}
   var its=rows.map(function(x){return {request_id:rr.data.id,title:x.title,qty:x.qty};});
   var ri=await sb.from('items').insert(its).select();
-  // платы: асик = 3 платы, хеш-плата = по количеству, другое = без плат
   if(ri.data){
    var bs=[];
    ri.data.forEach(function(item,ix){
@@ -461,7 +534,7 @@ function openNew(){
    });
    if(bs.length)await sb.from('boards').insert(bs);
   }
-  close();S.expanded[rr.data.id]=true;await loadData();toast('Заявка создана 🚀');
+  close();S.expanded[rr.data.id]=true;await loadData();renderList();toast('Заявка создана 🚀');
  });
 }
 
