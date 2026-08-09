@@ -38,7 +38,7 @@ header{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.92);backdro
 .row1{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .rnum{font-size:17px;font-weight:800;letter-spacing:-.3px}
 .pill{font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px}
-.p-grey{background:#eef0f4;color:#5a6270}.p-orange{background:#fff1de;color:#b36b05}.p-green{background:#e3f6ec;color:var(--green)}.p-teal{background:#e0f4f3;color:var(--teal)}
+.p-grey{background:#eef0f4;color:#5a6270}.p-orange{background:#fff1de;color:#b36b05}.p-green{background:#e3f6ec;color:var(--green)}.p-teal{background:#e0f4f3;color:var(--teal)}.p-blue{background:#e6efff;color:var(--blue)}.p-red{background:#fde9e7;color:var(--red)}
 .row2{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:13px;color:var(--mut)}
 .ttn{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;background:#f2f4f7;padding:3px 8px;border-radius:8px;display:inline-flex;align-items:center;gap:6px}
 .copybtn{border:0;background:none;cursor:pointer;font-size:13px;padding:0;line-height:1}
@@ -166,13 +166,21 @@ function effStage(it){
  var min=null;bs.forEach(function(b){var r=RANK[b.stage]!==undefined?RANK[b.stage]:0;if(min===null||r<min.r)min={r:r,s:b.stage};});
  return min.s;
 }
-function reqStatus(r){var its=reqItems(r.id);if(!its.length)return 'received';
+function reqStatus(r){
+ // пока Новая почта не отдала посылку мастеру — статус заявки диктует доставка
+ var np=r.ttn?S.np[r.ttn]:null;
+ if(np&&np.code&&np.code!=='9'&&np.code!=='2'&&np.code!=='3'){
+  if(np.code==='7'||np.code==='8'||np.code==='10')return 'branch';
+  if(np.code==='102'||np.code==='103'||np.code==='104'||np.code==='105'||np.code==='106')return 'npreturn';
+  return 'transit';
+ }
+ var its=reqItems(r.id);if(!its.length)return 'received';
  var st=its.map(effStage);
  if(st.every(function(s){return s==='shipped';}))return 'shipped';
  if(st.every(function(s){return s==='done'||s==='shipped'||s==='scrap';}))return 'done';
  if(st.some(function(s){return s!=='received';}))return 'work';
  return 'received';}
-var STATP={received:{l:'Принято',c:'p-grey'},work:{l:'В работе',c:'p-orange'},done:{l:'Готово',c:'p-green'},shipped:{l:'Отправлено',c:'p-teal'}};
+var STATP={transit:{l:'🚚 В дороге',c:'p-blue'},branch:{l:'📍 В отделении',c:'p-orange'},npreturn:{l:'↩ Возврат',c:'p-red'},received:{l:'Принято',c:'p-grey'},work:{l:'В работе',c:'p-orange'},done:{l:'Готово',c:'p-green'},shipped:{l:'Отправлено',c:'p-teal'}};
 function reqTitle(r){return r.number?('Заявка #'+r.number):'Заявка (без №)';}
 
 // ---------- ЗАГРУЗКА ДАННЫХ ----------
@@ -266,9 +274,13 @@ function renderShell(){
 }
 
 function renderChips(){
- var counts={all:S.requests.length,work:0,done:0,shipped:0};
- S.requests.forEach(function(r){var st=reqStatus(r);if(st==='done')counts.done++;else if(st==='shipped')counts.shipped++;else counts.work++;});
- var defs=[['all','Все'],['work','В работе'],['done','Готово'],['shipped','Отправлено']];
+ var counts={all:S.requests.length,delivery:0,work:0,done:0,shipped:0};
+ S.requests.forEach(function(r){var st=reqStatus(r);
+  if(st==='transit'||st==='branch'||st==='npreturn')counts.delivery++;
+  else if(st==='done')counts.done++;
+  else if(st==='shipped')counts.shipped++;
+  else counts.work++;});
+ var defs=[['all','Все'],['delivery','🚚 Доставка'],['work','В работе'],['done','Готово'],['shipped','Отправлено']];
  var h='';
  defs.forEach(function(d){h+='<button class="chip'+(S.filter===d[0]?' on':'')+'" data-f="'+d[0]+'">'+d[1]+' <b>'+counts[d[0]]+'</b></button>';});
  var el=document.getElementById('chips');el.innerHTML=h;
@@ -279,7 +291,9 @@ function visibleRequests(){
  var q=S.search.trim().toLowerCase();
  return S.requests.filter(function(r){
   var st=reqStatus(r);
-  if(S.filter==='work'&&(st==='done'||st==='shipped'))return false;
+  var isDelivery=(st==='transit'||st==='branch'||st==='npreturn');
+  if(S.filter==='delivery'&&!isDelivery)return false;
+  if(S.filter==='work'&&(st==='done'||st==='shipped'||isDelivery))return false;
   if(S.filter==='done'&&st!=='done')return false;
   if(S.filter==='shipped'&&st!=='shipped')return false;
   if(!q)return true;
