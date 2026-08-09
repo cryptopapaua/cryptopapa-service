@@ -42,6 +42,9 @@ header{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.92);backdro
 .row2{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:13px;color:var(--mut)}
 .ttn{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;background:#f2f4f7;padding:3px 8px;border-radius:8px;display:inline-flex;align-items:center;gap:6px}
 .copybtn{border:0;background:none;cursor:pointer;font-size:13px;padding:0;line-height:1}
+.npline{display:inline-flex;align-items:center;gap:6px;font-size:12.5px}
+.npbadge{background:#DA291C;color:#fff;font-weight:800;font-size:10px;border-radius:5px;padding:2px 5px;letter-spacing:.3px}
+.np-g{color:var(--green);font-weight:600}.np-o{color:#b36b05;font-weight:600}.np-b{color:var(--blue);font-weight:600}.np-r{color:var(--red);font-weight:600}.np-x{color:var(--mut);font-weight:600}
 .cln{color:var(--ink);font-weight:600}
 .itemsum{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}
 .isum{font-size:12px;padding:4px 9px;border-radius:8px;background:#f4f5f8;color:#454e5c;border:1px solid var(--line)}
@@ -145,7 +148,7 @@ var DEFECTS=['КЗ','Перегрев','Брак','Не видит чипы','П
 function sm(k){for(var j=0;j<STAGES.length;j++){if(STAGES[j].k===k)return STAGES[j];}return STAGES[0];}
 
 // S.edit: буферы незасохранённых правок: 'b<id>' — плата, 'i<id>' — позиция без плат
-var S={profile:null,requests:[],items:[],boards:[],comments:[],clients:[],filter:'all',search:'',expanded:{},confirmDel:{},confirmDelB:{},edit:{}};
+var S={profile:null,requests:[],items:[],boards:[],comments:[],clients:[],filter:'all',search:'',expanded:{},confirmDel:{},confirmDelB:{},edit:{},np:{}};
 var root=document.getElementById('root');
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];});}
@@ -188,6 +191,36 @@ async function loadData(){
  var list=document.getElementById('list');
  if(ae&&list&&list.contains(ae)&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'))return;
  renderList();
+}
+
+// ---------- СТАТУСЫ НОВОЙ ПОЧТЫ ----------
+function npCls(code){
+ if(code==='9')return 'np-g';
+ if(code==='7'||code==='8'||code==='10')return 'np-o';
+ if(code==='4'||code==='5'||code==='6'||code==='41'||code==='101')return 'np-b';
+ if(code==='102'||code==='103'||code==='104'||code==='105'||code==='106')return 'np-r';
+ return 'np-x';
+}
+function npIcon(code){
+ if(code==='9')return '✅';
+ if(code==='7'||code==='8'||code==='10')return '📍';
+ if(code==='4'||code==='5'||code==='6'||code==='41'||code==='101')return '🚚';
+ if(code==='102'||code==='103'||code==='104'||code==='105'||code==='106')return '↩️';
+ return '🕓';
+}
+async function fetchNp(){
+ var ttns=[];S.requests.forEach(function(r){if(r.ttn&&ttns.indexOf(r.ttn)<0)ttns.push(r.ttn);});
+ if(!ttns.length)return;
+ try{
+  var r=await sb.functions.invoke('np-track',{body:{ttns:ttns}});
+  if(r.data&&r.data.statuses){
+   S.np=r.data.statuses;
+   if(Object.keys(S.edit).length)return;
+   var ae=document.activeElement;var list=document.getElementById('list');
+   if(ae&&list&&list.contains(ae)&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'))return;
+   renderList();
+  }
+ }catch(e){}
 }
 
 // ---------- ЭКРАН ВХОДА ----------
@@ -326,6 +359,7 @@ function renderList(){
    '<span class="spacer"></span><span style="color:var(--mut);font-size:12px">'+fdate(r.created_at)+' '+(open?'▲':'▼')+'</span></div>';
   h+='<div class="row2">';
   if(r.ttn)h+='<span class="ttn">📦 '+esc(r.ttn)+' <button class="copybtn" data-copy="'+esc(r.ttn)+'" title="Скопировать ТТН">⧉</button></span>';
+  if(r.ttn&&S.np[r.ttn]){var np=S.np[r.ttn];h+='<span class="npline"><span class="npbadge">НП</span><span class="'+npCls(np.code)+'">'+npIcon(np.code)+' '+esc(np.status)+'</span></span>';}
   if(isOwner&&cl)h+='<span>👤 <span class="cln">'+esc(cl.name)+'</span></span>';
   if(cms.length)h+='<span>💬 '+cms.length+'</span>';
   h+='</div>';
@@ -548,6 +582,8 @@ async function start(){
  S.profile=p.data;
  renderShell();
  await loadData();
+ fetchNp();
+ setInterval(fetchNp,300000);
  sb.channel('crm').on('postgres_changes',{event:'*',schema:'public'},function(){
   clearTimeout(S._rt);S._rt=setTimeout(loadData,400);
  }).subscribe();
