@@ -42,6 +42,10 @@ header{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.92);backdro
 .row2{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:13px;color:var(--mut)}
 .ttn{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;background:#f2f4f7;padding:3px 8px;border-radius:8px;display:inline-flex;align-items:center;gap:6px}
 .copybtn{border:0;background:none;cursor:pointer;font-size:13px;padding:0;line-height:1}
+.durb{font-size:12px;font-weight:700;padding:3px 9px;border-radius:99px;white-space:nowrap}
+.dur-ok{background:#eef0f4;color:#5a6270}
+.dur-warn{background:#fff1de;color:#b36b05}
+.dur-bad{background:#fde9e7;color:var(--red)}
 .numrow{display:flex;align-items:center;gap:8px;margin:10px 0 0;font-size:13.5px;color:var(--mut);flex-wrap:wrap}
 .numrow b{color:var(--ink)}
 .npline{display:inline-flex;align-items:center;gap:6px;font-size:12.5px}
@@ -218,6 +222,38 @@ function npIcon(code){
  if(code==='102'||code==='103'||code==='104'||code==='105'||code==='106')return '↩️';
  return '🕓';
 }
+function parseNpDate(s){
+ if(!s)return null;
+ var m=String(s).match(/^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
+ if(m)return new Date(+m[3],+m[2]-1,+m[1],+(m[4]||12),+(m[5]||0)).toISOString();
+ var d=new Date(String(s).replace(' ','T'));
+ return isNaN(d.getTime())?null:d.toISOString();
+}
+function repairDays(r){
+ if(!r.accepted_at)return null;
+ var ms=Date.now()-new Date(r.accepted_at).getTime();
+ return Math.max(0,Math.floor(ms/86400000));
+}
+// бейдж срока ремонта: до 7 дн. — норм, 7–13 — долго, 14+ — очень долго
+function durBadge(r){
+ var st=reqStatus(r);
+ if(st==='transit'||st==='branch'||st==='npreturn'||st==='done'||st==='shipped')return '';
+ var d=repairDays(r);if(d==null)return '';
+ if(d>=14)return '<span class="durb dur-bad">🔥 '+d+' дн. в ремонте — очень долго!</span>';
+ if(d>=7)return '<span class="durb dur-warn">⏰ '+d+' дн. в ремонте — долго</span>';
+ return '<span class="durb dur-ok">🕓 '+(d===0?'принят сегодня':d+' дн. в ремонте')+'</span>';
+}
+// автопроставление даты принятия: НП сказала «отримано» — фиксируем дату вручения
+async function autoAccept(){
+ for(var j=0;j<S.requests.length;j++){
+  var r=S.requests[j];
+  if(!r.accepted_at&&r.ttn&&S.np[r.ttn]&&S.np[r.ttn].code==='9'){
+   var iso=parseNpDate(S.np[r.ttn].received_at)||new Date().toISOString();
+   var res=await sb.from('requests').update({accepted_at:iso}).eq('id',r.id);
+   if(!res.error)r.accepted_at=iso;
+  }
+ }
+}
 async function fetchNp(){
  var ttns=[];S.requests.forEach(function(r){if(r.ttn&&ttns.indexOf(r.ttn)<0)ttns.push(r.ttn);});
  if(!ttns.length)return;
@@ -225,6 +261,7 @@ async function fetchNp(){
   var r=await sb.functions.invoke('np-track',{body:{ttns:ttns}});
   if(r.data&&r.data.statuses){
    S.np=r.data.statuses;
+   await autoAccept();
    if(Object.keys(S.edit).length)return;
    var ae=document.activeElement;var list=document.getElementById('list');
    if(ae&&list&&list.contains(ae)&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'))return;
@@ -313,6 +350,7 @@ function captureInputs(){
  list.querySelectorAll('.bfact').forEach(function(inp){var e=S.edit['b'+inp.getAttribute('data-board')];if(e)e.fact_chips=inp.value;});
  list.querySelectorAll('.bnote').forEach(function(inp){var e=S.edit['b'+inp.getAttribute('data-board')];if(e)e.note=inp.value;});
  list.querySelectorAll('.rnumin').forEach(function(inp){var e=S.edit['r'+inp.getAttribute('data-req')];if(e)e.number=inp.value;});
+ list.querySelectorAll('.accin').forEach(function(inp){var e=S.edit['a'+inp.getAttribute('data-req')];if(e)e.date=inp.value;});
 }
 
 function stageSelect(cls,attr,id,cur){
@@ -377,6 +415,7 @@ function renderList(){
   h+='<div class="row2">';
   if(r.ttn)h+='<span class="ttn">📦 '+esc(r.ttn)+' <button class="copybtn" data-copy="'+esc(r.ttn)+'" title="Скопировать ТТН">⧉</button></span>';
   if(r.ttn&&S.np[r.ttn]){var np=S.np[r.ttn];h+='<span class="npline"><span class="npbadge">НП</span><span class="'+npCls(np.code)+'">'+npIcon(np.code)+' '+esc(np.status)+'</span></span>';}
+  var db=durBadge(r);if(db)h+=db;
   if(isOwner&&cl)h+='<span>👤 <span class="cln">'+esc(cl.name)+'</span></span>';
   if(cms.length)h+='<span>💬 '+cms.length+'</span>';
   h+='</div>';
@@ -393,6 +432,11 @@ function renderList(){
    h+='<div class="numrow">';
    if(!re){h+='№ заявки: <b>'+(r.number?('#'+r.number):'без №')+'</b><button class="ebtn" style="margin-left:0" data-en="'+r.id+'">✏️ Изменить</button>';}
    else{h+='<input class="chipin rnumin" data-req="'+r.id+'" type="number" placeholder="№" value="'+esc(re.number)+'"><button class="btn sbtn" data-sn="'+r.id+'">💾 Сохранить</button><button class="btn cbtn" data-cn="'+r.id+'">Отмена</button>';}
+   h+='</div>';
+   var ra=S.edit['a'+r.id];
+   h+='<div class="numrow">📅 Принят в ремонт: ';
+   if(!ra){h+='<b>'+(r.accepted_at?fdate(r.accepted_at):'—')+'</b>'+(r.accepted_at?'':' <span style="font-size:12px">(поставится сам, когда НП отдаст посылку, или вручную)</span>')+'<button class="ebtn" style="margin-left:0" data-ea="'+r.id+'">✏️ Изменить</button>';}
+   else{h+='<input class="chipin accin" style="width:160px" type="date" data-req="'+r.id+'" value="'+esc(ra.date)+'"><button class="btn sbtn" data-sa="'+r.id+'">💾 Сохранить</button><button class="btn cbtn" data-ca="'+r.id+'">Отмена</button>';}
    h+='</div>';
    h+='<div class="sect">Оборудование и стадии</div>';
    its.forEach(function(i){
@@ -458,6 +502,26 @@ function renderList(){
  });});
  list.querySelectorAll('[data-cn]').forEach(function(btn){btn.addEventListener('click',function(){
   delete S.edit['r'+btn.getAttribute('data-cn')];renderList();
+ });});
+ // 📅 дата принятия в ремонт (владелец и мастер)
+ list.querySelectorAll('[data-ea]').forEach(function(btn){btn.addEventListener('click',function(){
+  var id=+btn.getAttribute('data-ea');
+  var r=S.requests.find(function(x){return x.id===id;});if(!r)return;
+  S.edit['a'+id]={date:r.accepted_at?new Date(r.accepted_at).toISOString().slice(0,10):''};
+  renderList();
+ });});
+ list.querySelectorAll('[data-sa]').forEach(function(btn){btn.addEventListener('click',async function(){
+  captureInputs();
+  var id=+btn.getAttribute('data-sa');var e=S.edit['a'+id];if(!e)return;
+  btn.disabled=true;btn.textContent='Сохраняем…';
+  var iso=(e.date||'').trim()?new Date(e.date+'T12:00:00').toISOString():null;
+  var r=await sb.from('requests').update({accepted_at:iso}).eq('id',id);
+  if(r.error){toast('Ошибка сохранения');btn.disabled=false;btn.textContent='💾 Сохранить';return;}
+  var rq=S.requests.find(function(x){return x.id===id;});if(rq)rq.accepted_at=iso;
+  delete S.edit['a'+id];renderList();toast('Дата сохранена ✓');
+ });});
+ list.querySelectorAll('[data-ca]').forEach(function(btn){btn.addEventListener('click',function(){
+  delete S.edit['a'+btn.getAttribute('data-ca')];renderList();
  });});
  // ✏️ Изменить: позиция без плат
  list.querySelectorAll('[data-ei]').forEach(function(btn){btn.addEventListener('click',function(){
